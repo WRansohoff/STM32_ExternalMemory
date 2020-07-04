@@ -102,7 +102,7 @@ void qspi_wen() {
   qspi_reg_wait( 0x05, 0x43, 0x42 );
 }
 
-// Erase a 4KB sector. Sector addres = ( snum * 0x1000 )
+// Erase a 4KB sector. Sector address = ( snum * 0x1000 )
 void qspi_erase_sector( uint32_t snum ) {
   // Send 'enable writes' command.
   qspi_wen();
@@ -125,6 +125,7 @@ void qspi_erase_sector( uint32_t snum ) {
   qspi_reg_wait( 0x05, 0x43, 0x40 );
 }
 
+// Write one word of data (4 bytes) to a QSPI Flash chip.
 void qspi_write_word( uint32_t addr, uint32_t data ) {
   // Send 'enable writes' command.
   qspi_wen();

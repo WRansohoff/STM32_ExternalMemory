@@ -171,7 +171,7 @@ int main( void ) {
   printf( "QSPI[2]: 0x%08X\r\n", val );
 
   // Set initial LED values.
-  // Blue (A5) off, red (A7) off, green (B1) on.
+  // Blue (A5) off, red (A7) off, green (B1) off.
   GPIOA->ODR   &= ~( ( 1 << 5 ) | ( 1 << 7 ) );
   GPIOB->ODR   &= ~( 1 << 1 );
 
