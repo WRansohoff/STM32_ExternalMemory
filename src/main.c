@@ -144,7 +144,10 @@ int main( void ) {
   // Use the PSRAM as a display framebuffer; clear out an area of
   // 240*240*2 bytes (16 bits per pixel). Start with a purple color.
   // Color format is [MSb] R-G-B [LSb]. 5 bits for R and B, 6 for G.
-  for ( int i = 0; i < ( 240 * 240 ); ++i ) { psramh[ i ] = 0x781F; }
+  uint16_t reset_color = RGB565( 0x0F, 0x00, 0x1F );
+  for ( int i = 0; i < ( 240 * 240 ); ++i ) {
+    psramh[ i ] = reset_color;
+  }
 
   // Configure the DMA peripheral to ferry display data from
   // PSRAM to the display in 'memory-to-memory' mode on stream 0.
@@ -175,7 +178,7 @@ int main( void ) {
   GPIOA->ODR   &= ~( ( 1 << 5 ) | ( 1 << 7 ) );
   GPIOB->ODR   &= ~( 1 << 1 );
 
-  // Configure pin C8 for EXTI input interrupts on both edges.
+  // Configure pin C8 for EXTI input interrupts on rising edges.
   SYSCFG->EXTICR[ ( 8 / 4 ) ] &= ~( SYSCFG_EXTICR3_EXTI8 );
   SYSCFG->EXTICR[ ( 8 / 4 ) ] |=  ( SYSCFG_EXTICR3_EXTI8_PC );
   EXTI->IMR  |=  ( 1 << 8 );
@@ -186,7 +189,21 @@ int main( void ) {
 
   // Main loop.
   uint16_t col = 0;
+  int a = 0;
+  int b = 0;
+  int fpsc = 0;
+  float fps = 0.0;
+  char fps_str[ 32 ] = "\0";
   while ( 1 ) {
+    // Calculate framerate every other frame.
+    if ( fpsc ) {
+      b = systick;
+      fps = 1000.0 / ( float )( b - a );
+      snprintf( fps_str, 32, "FPS: %.2f", fps );
+    }
+    else { a = systick; }
+    fpsc = !fpsc;
+
     // Set the 'write lock' bit and wait for ongoing DMA to finish.
     wrl = 1;
     while ( bus_busy ) {};
@@ -195,15 +212,28 @@ int main( void ) {
     for ( int i = 0; i < ( 240 * 240 ); ++i ) {
       psramh[ i ] = col;
     }
+    // Draw a few test patterns to the screen.
+    tft_text( 10, 100, "Hello, world!\0", ( col ^ 0xFFFF ), 3 );
+    tft_rect( 20, 20, 200, 60, 4, ( col ^ 0xFFFF ) );
+    tft_rect( 30, 30, 180, 40, 3, ( col ^ 0xFFFF ) );
+    tft_rect( 40, 40, 160, 20, 2, ( col ^ 0xFFFF ) );
+    tft_rect( 20, 140, 200, 80, 0, ( col ^ 0xFFFF ) );
+    // Print the calculated frames per second.
+    tft_text( 30, 165, fps_str, col, 3 );
     col += 1;
 
     // Reset the display drawing area.
     tft_draw_fullscreen();
 
-    // Release the write lock, and wait for DMA to start again
-    // next time the vblank interrupt triggers.
+    // Release the write lock, and start the next DMA cycle.
     wrl = 0;
-    while ( !bus_busy ) {};
+    DMA2_Stream0->CR  |=  ( DMA_SxCR_EN );
+    bus_busy = 1;
+
+    // ...Or wait for the next vblank interrupt to start a DMA cycle.
+    // But that is significantly slower and I haven't noticed
+    // a drop in quality from ignoring it. So I'm commenting this out.
+    //while ( !bus_busy ) {};
   }
   return 0; // lol
 }
@@ -218,10 +248,14 @@ void SysTick_IRQn_handler( void ) {
 void EXTI9_5_IRQn_handler( void ) {
   if ( EXTI->PR & EXTI_PR_PR8 ) {
     // Start a DMA transfer if the 'write lock' variable is not set.
+    // Commented out because this reduces FPS by as much as ~30%, and
+    // I don't notice any tearing without this synchronization.
+    /*
     if ( !wrl ) {
       DMA2_Stream0->CR  |=  ( DMA_SxCR_EN );
       bus_busy = 1;
     }
+    */
     // Acknowledge the interrupt.
     EXTI->PR |=  ( EXTI_PR_PR8 );
   }
@@ -229,9 +263,10 @@ void EXTI9_5_IRQn_handler( void ) {
 
 // DMA2, Stream0 interrupt handler.
 void DMA2_Stream0_IRQn_handler( void ) {
-  // Clear the 'transfer complete' flag when it is set.
   if ( DMA2->LISR & DMA_LISR_TCIF0 ) {
+    // Clear the 'transfer complete' flag.
     DMA2->LIFCR |=  ( DMA_LIFCR_CTCIF0 );
+    // Mark the RAM / display bus as 'not busy'.
     bus_busy = 0;
   }
 }
