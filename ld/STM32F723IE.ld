@@ -3,7 +3,7 @@ ENTRY(reset_handler)
 
 /* End of RAM/Start of stack */
 /* (176KB in SRAM1) TODO: Use SRAM2 for stack? */
-_estack = 0x2003BFFF;
+_estack = 0x2003C000;
 
 /* Set minimum size for stack and dynamic memory. */
 /* (The linker will generate an error if there is
